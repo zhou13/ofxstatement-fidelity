@@ -52,3 +52,4 @@ uv run python -m build
 
 - Column mapping is derived from the header; odd or reordered exports should still parse.
 - Splits and spin-offs lack ratio data in Fidelity exports; they arrive as transfer-style entries and may need manual cost-basis adjustments in your accounting software.
+- If the CSV includes a cash balance column, the plugin sets the statement end balance from the most recent entry.
