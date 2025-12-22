@@ -58,7 +58,7 @@ class FidelityCSVParser(AbstractStatementParser):
         return D(cleaned.replace(",", ".").replace(" ", ""))
 
     def parse_value(self, value: str | None, field: str) -> Any:
-        tp = StatementLine.__annotations__.get(field)
+        tp = InvestStatementLine.__annotations__.get(field)
         if value is None:
             return None
 
@@ -232,6 +232,8 @@ class FidelityCSVParser(AbstractStatementParser):
             set_banktran("XFER")
         elif re.match(r"^TRANSFERRED TO ", action):
             set_banktran("XFER")
+        elif re.match(r"^JOURNALED", action):
+            set_banktran("OTHER")
         else:
             if isinstance(amount_value, Decimal):
                 set_banktran("CREDIT" if amount_value >= 0 else "DEBIT")
@@ -262,7 +264,7 @@ class FidelityCSVParser(AbstractStatementParser):
                     self.statement.invest_lines.append(invest_stmt_line)
 
             # derive account id from file name
-            match = re.search(r".*Account_(.*)\.csv", path.basename(self.filename))
+            match = re.search(r".*Account_(\d*).*\.csv", path.basename(self.filename))
             if match:
                 self.statement.account_id = match[1]
             elif self.account_number:
