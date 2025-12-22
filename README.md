@@ -2,7 +2,7 @@
 
 Parse Fidelity CSV exports into OFX using the `ofxstatement` plugin system. Works with standard History/Accounts_History exports and auto-detects column order from the CSV header.
 
-NOTE: When downloading csv from fidelity.com, please download one csv for each account. `ofxstatement` does not support outputing account statements.
+NOTE: When downloading csv from fidelity.com, please download one csv for each account. `ofxstatement` does not support outputing account statements. Since the csv file does not contain account number this way, you must name your file in the format `History_for_Account_XXXXX.csv`.
 
 ## Install
 
@@ -28,6 +28,12 @@ Use [uv](https://docs.astral.sh/uv/) for a fast, isolated dev environment.
 
 ```bash
 uv sync --extra dev
+```
+
+Install the pre-commit hook (runs Ruff on staged files):
+
+```bash
+uv run pre-commit install
 ```
 
 Run checks and tests:
