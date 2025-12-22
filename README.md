@@ -2,6 +2,8 @@
 
 Parse Fidelity CSV exports into OFX using the `ofxstatement` plugin system. Works with standard History/Accounts_History exports and auto-detects column order from the CSV header.
 
+NOTE: When downloading csv from fidelity.com, please download one csv for each account. `ofxstatement` does not support outputing account statements.
+
 ## Install
 
 Install straight from GitHub (pulls `ofxstatement` as a dependency):
