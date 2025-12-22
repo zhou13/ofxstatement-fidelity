@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ofxstatement-fidelity"
 version = "0.1.0"
 authors = [
-  { name="Dan Moore", email="dan@suncup.net" },
+  { name="Yichao Zhou", email="zyc@berkeley.edu" },
 ]
 description = "ofxstatement plugin for Fidelity CSV exports"
 readme = "README.md"
@@ -23,11 +23,16 @@ classifiers = [
 ]
 keywords = ["ofx", "banking", "statement", "plugin", "ofxstatement", "fidelity", "csv"]
 dependencies = [
-  "ofxstatement",
+  "ofxstatement>=0.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
 ]
 
 [project.urls]
-Homepage = "https://github.com/mooredan/ofxstatement-fidelity/"
+Homepage = "https://github.com/zhou13/ofxstatement-fidelity/"
 
 [project.entry-points."ofxstatement"]
 fidelity = "ofxstatement_fidelity.plugin:FidelityPlugin"

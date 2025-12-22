@@ -40,7 +40,7 @@ class FidelityCSVParser(AbstractStatementParser):
         self.statement.broker_id = "Fidelity"
         self.statement.currency = "USD"
         self.id_generator = IdGenerator()
-        self.account_numbers: set[str] = set()
+        self.account_number: str | None = None
         self.column_map: dict[str, int] = {}
 
     def parse_datetime(self, value: str) -> datetime:
@@ -109,7 +109,6 @@ class FidelityCSVParser(AbstractStatementParser):
             return cleaned_line[idx]
 
         run_date = column_value("Run Date")
-        account = column_value("Account")
         account_number = column_value("Account Number")
         action = column_value("Action")
         symbol = column_value("Symbol")
@@ -135,24 +134,16 @@ class FidelityCSVParser(AbstractStatementParser):
         if not run_date[:1].isdigit():
             return None
 
-        if not amount:
+        if not amount or float(amount) == 0:
             return None
 
         if account_number:
-            self.account_numbers.add(account_number)
+            self.account_number = account_number
 
         invest_stmt_line.memo = action
 
-        # fees
-        field = "fees"
-        value = self.parse_value(fees, field)
-        setattr(invest_stmt_line, field, value)
-
-        # amount
-        field = "amount"
-        value = self.parse_value(amount, field)
-        setattr(invest_stmt_line, field, value)
-        amount_value = invest_stmt_line.amount
+        invest_stmt_line.fees = self.parse_value(fees, "fees")
+        invest_stmt_line.amount = amount_value = self.parse_value(amount, "amount")
 
         date = datetime.strptime(run_date[0:10], "%m/%d/%Y")
         invest_stmt_line.date = date
@@ -221,6 +212,8 @@ class FidelityCSVParser(AbstractStatementParser):
             set_banktran("DEBIT")
         elif re.match(r"^Electronic Funds Transfer Paid ", action):
             set_banktran("DEBIT")
+        elif re.match(r"^Check Paid", action):
+            set_banktran("DEBIT")
         elif re.match(r"^TRANSFERRED FROM ", action):
             set_banktran("XFER")
         elif re.match(r"^DIRECT DEPOSIT ", action):
@@ -240,13 +233,14 @@ class FidelityCSVParser(AbstractStatementParser):
         elif re.match(r"^TRANSFERRED TO ", action):
             set_banktran("XFER")
         else:
-            LOGGER.warning(f"Unknown action: {action}.  Guessing...")
             if isinstance(amount_value, Decimal):
                 set_banktran("CREDIT" if amount_value >= 0 else "DEBIT")
             else:
                 set_banktran("OTHER")
+            LOGGER.warning(
+                f"Unknown action: {action}.  Guess it is: {invest_stmt_line}"
+            )
 
-        # print(f"{invest_stmt_line}")
         return invest_stmt_line
 
     # parse the CSV file and return a Statement
@@ -264,7 +258,6 @@ class FidelityCSVParser(AbstractStatementParser):
                     continue
                 invest_stmt_line = self.parse_record(csv_line)
                 if invest_stmt_line:
-                    print(invest_stmt_line)
                     invest_stmt_line.assert_valid()
                     self.statement.invest_lines.append(invest_stmt_line)
 
@@ -272,9 +265,12 @@ class FidelityCSVParser(AbstractStatementParser):
             match = re.search(r".*Account_(.*)\.csv", path.basename(self.filename))
             if match:
                 self.statement.account_id = match[1]
-            elif len(self.account_numbers) == 1:
-                # Accounts_History exports include a single account number in column 3
-                self.statement.account_id = next(iter(self.account_numbers))
+            elif self.account_number:
+                self.statement.account_id = self.account_number
+            else:
+                LOGGER.warning(
+                    f"Unable to derive account id from {self.filename}, please use a filename like xxx_Account_123456789.csv"
+                )
 
             # reverse the lines
             self.statement.invest_lines.reverse()
