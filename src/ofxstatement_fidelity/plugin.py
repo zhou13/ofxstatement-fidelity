@@ -9,7 +9,7 @@ from typing import Any, TextIO, get_args, get_origin
 
 from ofxstatement.plugin import Plugin
 from ofxstatement.parser import AbstractStatementParser
-from ofxstatement.statement import Statement, InvestStatementLine, StatementLine
+from ofxstatement.statement import Statement, InvestStatementLine
 
 import logging
 import csv
@@ -37,11 +37,12 @@ class FidelityCSVParser(AbstractStatementParser):
         super().__init__()
         self.filename = filename
         self.statement = Statement()
-        self.statement.broker_id = "Fidelity"
+        self.statement.broker_id = "fidelity.com"
         self.statement.currency = "USD"
         self.id_generator = IdGenerator()
         self.account_number: str | None = None
         self.column_map: dict[str, int] = {}
+        self.end_cash_balance: D | None = None
 
     def parse_datetime(self, value: str) -> datetime:
         return datetime.strptime(value, self.date_format)
@@ -112,13 +113,13 @@ class FidelityCSVParser(AbstractStatementParser):
         account_number = column_value("Account Number")
         action = column_value("Action")
         symbol = column_value("Symbol")
-        description = column_value("Description")
-        type_field = column_value("Type")
+        # description = column_value("Description")
+        # type_field = column_value("Type")
         price = column_value("Price ($)")
         quantity = column_value("Quantity")
-        commission = column_value("Commission ($)")
+        # commission = column_value("Commission ($)")
         fees = column_value("Fees ($)")
-        accrued_interest = column_value("Accrued Interest ($)")
+        # accrued_interest = column_value("Accrued Interest ($)")
         amount = column_value("Amount ($)")
         cash_balance = column_value("Cash Balance ($)")
         settlement_date = column_value("Settlement Date")
@@ -144,6 +145,9 @@ class FidelityCSVParser(AbstractStatementParser):
 
         invest_stmt_line.fees = self.parse_value(fees, "fees")
         invest_stmt_line.amount = amount_value = self.parse_value(amount, "amount")
+        cash_balance_value = self.parse_decimal(cash_balance)
+        if cash_balance_value is not None and self.end_cash_balance is None:
+            self.end_cash_balance = cash_balance_value
 
         date = datetime.strptime(run_date[0:10], "%m/%d/%Y")
         invest_stmt_line.date = date
@@ -191,8 +195,9 @@ class FidelityCSVParser(AbstractStatementParser):
             invest_stmt_line.trntype = "INVBANKTRAN"
             invest_stmt_line.trntype_detailed = detail
 
-        if re.match(r"^REINVESTMENT ", action):
-            set_buy("BUY")
+        if re.match(r"^REINVESTMENT .*(Cash)", action):
+            # REINVESTMENT FIDELITY GOVERNMENT MONEY MARKET (SPAXX) (Cash) should be ignored
+            return None
         elif re.match(r"^DIVIDEND RECEIVED ", action):
             set_income("DIV")
             invest_stmt_line.units = quantity_value
@@ -264,8 +269,8 @@ class FidelityCSVParser(AbstractStatementParser):
                     self.statement.invest_lines.append(invest_stmt_line)
 
             # derive account id from file name
-            match = re.search(r".*Account_(\d*).*\.csv", path.basename(self.filename))
-            if match:
+            match = re.search(r".*Account_(\w*).*\.csv", path.basename(self.filename))
+            if match and match[1]:
                 self.statement.account_id = match[1]
             elif self.account_number:
                 self.statement.account_id = self.account_number
@@ -291,6 +296,7 @@ class FidelityCSVParser(AbstractStatementParser):
                 self.statement.end_date = max(
                     sl.date for sl in self.statement.invest_lines if sl.date is not None
                 )
+                self.statement.end_balance = self.end_cash_balance
 
             # print(f"{self.statement}")
             return self.statement
