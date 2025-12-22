@@ -1,29 +1,26 @@
-import sys
+from __future__ import annotations
 
 from os import path
 
 from decimal import Decimal, Decimal as D
 from datetime import datetime
 import re
-from typing import Dict, Optional, Any, Iterable, List, TextIO, TypeVar, Generic, Set
+from typing import Any, TextIO, get_args, get_origin
 
 from ofxstatement.plugin import Plugin
-from ofxstatement.parser import StatementParser
-
-# from ofxstatement.parser import CsvStatementParser
 from ofxstatement.parser import AbstractStatementParser
 from ofxstatement.statement import Statement, InvestStatementLine, StatementLine
 
-# import logging
-# LOGGER = logging.getLogger(__name__)
-
+import logging
 import csv
+
+LOGGER = logging.getLogger(__name__)
 
 
 class FidelityPlugin(Plugin):
     """Sample plugin (for developers only)"""
 
-    def get_parser(self, filename: str) -> "FidelityCSVParser":
+    def get_parser(self, filename: str) -> FidelityCSVParser:
         parser = FidelityCSVParser(filename)
         return parser
 
@@ -43,12 +40,12 @@ class FidelityCSVParser(AbstractStatementParser):
         self.statement.broker_id = "Fidelity"
         self.statement.currency = "USD"
         self.id_generator = IdGenerator()
-        self.account_numbers: Set[str] = set()
+        self.account_numbers: set[str] = set()
 
     def parse_datetime(self, value: str) -> datetime:
         return datetime.strptime(value, self.date_format)
 
-    def parse_decimal(self, value: Optional[str]) -> Optional[D]:
+    def parse_decimal(self, value: str | None) -> D | None:
         if value is None:
             return None
 
@@ -59,17 +56,24 @@ class FidelityCSVParser(AbstractStatementParser):
         # some plugins pass localised numbers, clean them up
         return D(cleaned.replace(",", ".").replace(" ", ""))
 
-    def parse_value(self, value: Optional[str], field: str) -> Any:
+    def parse_value(self, value: str | None, field: str) -> Any:
         tp = StatementLine.__annotations__.get(field)
         if value is None:
             return None
 
-        if tp in (datetime, Optional[datetime]):
+        def _matches(target) -> bool:
+            if tp is target:
+                return True
+            origin = get_origin(tp)
+            if origin is None:
+                return False
+            return target in get_args(tp)
+
+        if _matches(datetime):
             return self.parse_datetime(value)
-        elif tp in (Decimal, Optional[Decimal]):
+        if _matches(Decimal):
             return self.parse_decimal(value)
-        else:
-            return value
+        return value
 
     def parse_record(self, line):
         """Parse given transaction line and return StatementLine object"""
@@ -308,7 +312,7 @@ class IdGenerator:
     """
 
     def __init__(self) -> None:
-        self.date_count: Dict[datetime, int] = {}
+        self.date_count: dict[datetime, int] = {}
 
     def create_id(self, date) -> str:
         self.date_count[date] = self.date_count.get(date, 0) + 1
