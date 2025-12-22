@@ -41,6 +41,7 @@ class FidelityCSVParser(AbstractStatementParser):
         self.statement.currency = "USD"
         self.id_generator = IdGenerator()
         self.account_numbers: set[str] = set()
+        self.column_map: dict[str, int] = {}
 
     def parse_datetime(self, value: str) -> datetime:
         return datetime.strptime(value, self.date_format)
@@ -89,81 +90,52 @@ class FidelityCSVParser(AbstractStatementParser):
             col.strip() if isinstance(col, str) else col for col in cleaned_line
         ]
 
-        # line[0 ] : Run Date
-        # line[1 ] : Account (only in Accounts_History)
-        # line[2 ] : Account Number (only in Accounts_History)
-        # line[3 ] : Action
-        # line[4 ] : Symbol
-        # line[5 ] : Description
-        # line[6 ] : Type
-        # line[7 ] : Price ($)
-        # line[8 ] : Quantity
-        # line[9 ] : Commission ($)
-        # line[10] : Fees ($)
-        # line[11] : Accrued Interest ($)
-        # line[12] : Amount ($)
-        # line[13] : Settlement Date
-
-        line_length = len(cleaned_line)
-
-        if line_length > 14:
-            cleaned_line = cleaned_line[:14]
-            line_length = len(cleaned_line)
-
         # tolerate the BOM-only line and blank lines
-        if line_length == 0 or (line_length == 1 and cleaned_line[0] == ""):
+        if len(cleaned_line) == 0 or (len(cleaned_line) == 1 and cleaned_line[0] == ""):
             return None
 
-        # skip the header
+        # skip the header and capture column order
         if cleaned_line[0] == "Run Date":
+            self.column_map = {col: idx for idx, col in enumerate(cleaned_line) if col}
+            return None
+
+        if not self.column_map:
+            return None
+
+        def column_value(name: str) -> str | None:
+            idx = self.column_map.get(name)
+            if idx is None or idx >= len(cleaned_line):
+                return None
+            return cleaned_line[idx]
+
+        run_date = column_value("Run Date")
+        account = column_value("Account")
+        account_number = column_value("Account Number")
+        action = column_value("Action")
+        symbol = column_value("Symbol")
+        description = column_value("Description")
+        type_field = column_value("Type")
+        price = column_value("Price ($)")
+        quantity = column_value("Quantity")
+        commission = column_value("Commission ($)")
+        fees = column_value("Fees ($)")
+        accrued_interest = column_value("Accrued Interest ($)")
+        amount = column_value("Amount ($)")
+        cash_balance = column_value("Cash Balance ($)")
+        settlement_date = column_value("Settlement Date")
+
+        if run_date is None or action is None:
             return None
 
         # skip lines which are comments
-        if cleaned_line[0][:1] == '"':
+        if run_date[:1] == '"':
             return None
 
         # skip any line that does not begin with a digit
-        if not cleaned_line[0][:1].isdigit():
+        if not run_date[:1].isdigit():
             return None
 
-        if line_length == 13:
-            (
-                run_date,
-                action,
-                symbol,
-                description,
-                type_field,
-                quantity,
-                price,
-                commission,
-                fees,
-                accrued_interest,
-                amount,
-                cash_balance,
-                settlement_date,
-            ) = cleaned_line
-            account = None
-            account_number = None
-        elif line_length >= 14:
-            # Accounts_History exports sometimes include a trailing empty column; drop extras
-            normalized = cleaned_line[:14]
-            (
-                run_date,
-                account,
-                account_number,
-                action,
-                symbol,
-                description,
-                type_field,
-                price,
-                quantity,
-                commission,
-                fees,
-                accrued_interest,
-                amount,
-                settlement_date,
-            ) = normalized
-        else:
+        if not amount:
             return None
 
         if account_number:
@@ -180,6 +152,7 @@ class FidelityCSVParser(AbstractStatementParser):
         field = "amount"
         value = self.parse_value(amount, field)
         setattr(invest_stmt_line, field, value)
+        amount_value = invest_stmt_line.amount
 
         date = datetime.strptime(run_date[0:10], "%m/%d/%Y")
         invest_stmt_line.date = date
@@ -203,51 +176,75 @@ class FidelityCSVParser(AbstractStatementParser):
         if symbol:
             invest_stmt_line.security_id = symbol
 
-        if re.match(r"^REINVESTMENT ", action):
+        def set_buy(trntype_detailed: str) -> None:
             invest_stmt_line.trntype = "BUYSTOCK"
-            invest_stmt_line.trntype_detailed = "BUY"
-            invest_stmt_line.security_id = symbol
+            invest_stmt_line.trntype_detailed = trntype_detailed
             invest_stmt_line.units = quantity_value
             invest_stmt_line.unit_price = price_value
-        elif re.match(r"^DIVIDEND RECEIVED ", action):
-            invest_stmt_line.trntype = "INCOME"
-            invest_stmt_line.trntype_detailed = "DIV"
-            invest_stmt_line.security_id = symbol
-        elif re.match(r"^YOU BOUGHT ", action):
-            invest_stmt_line.trntype = "BUYSTOCK"
-            invest_stmt_line.trntype_detailed = "BUY"
-            invest_stmt_line.security_id = symbol
-            invest_stmt_line.units = quantity_value
-            invest_stmt_line.unit_price = price_value
-        elif re.match(r"^YOU SOLD ", action):
+
+        def set_sell(trntype_detailed: str) -> None:
             invest_stmt_line.trntype = "SELLSTOCK"
-            invest_stmt_line.trntype_detailed = "SELL"
-            invest_stmt_line.security_id = symbol
+            invest_stmt_line.trntype_detailed = trntype_detailed
             invest_stmt_line.units = quantity_value
             invest_stmt_line.unit_price = price_value
-        elif re.match(r"^DIRECT DEBIT ", action):
+
+        def set_income(trntype_detailed: str) -> None:
+            invest_stmt_line.trntype = "INCOME"
+            invest_stmt_line.trntype_detailed = trntype_detailed
+
+        def set_expense() -> None:
+            invest_stmt_line.trntype = "INVEXPENSE"
+            invest_stmt_line.trntype_detailed = None
+
+        def set_banktran(detail: str) -> None:
             invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "DEBIT"
-        elif re.match(r"^Electronic Funds Transfer Paid ", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "DEBIT"
-        elif re.match(r"^TRANSFERRED FROM ", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "CREDIT"
-        elif re.match(r"^DIRECT DEPOSIT ", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "CREDIT"
-        elif re.match(r"^INTEREST EARNED ", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "CREDIT"
+            invest_stmt_line.trntype_detailed = detail
+
+        if re.match(r"^REINVESTMENT ", action):
+            set_buy("BUY")
+        elif re.match(r"^DIVIDEND RECEIVED ", action):
+            set_income("DIV")
+            invest_stmt_line.units = quantity_value
+            invest_stmt_line.unit_price = price_value
+        elif re.match(r"^YOU BOUGHT ", action):
+            set_buy("BUY")
+        elif re.match(r"^YOU SOLD ", action):
+            set_sell("SELL")
         elif re.match(r"^TAX WITHHELD ", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "DEBIT"
+            if symbol and amount_value is not None:
+                set_expense()
+            else:
+                set_banktran("DEBIT")
+        elif re.match(r"^INTEREST EARNED ", action):
+            set_banktran("INT")
+        elif re.match(r"^DIRECT DEBIT ", action):
+            set_banktran("DEBIT")
+        elif re.match(r"^Electronic Funds Transfer Paid ", action):
+            set_banktran("DEBIT")
+        elif re.match(r"^TRANSFERRED FROM ", action):
+            set_banktran("XFER")
+        elif re.match(r"^DIRECT DEPOSIT ", action):
+            set_banktran("CREDIT")
         elif re.match(r"^Contributions$", action):
-            invest_stmt_line.trntype = "INVBANKTRAN"
-            invest_stmt_line.trntype_detailed = "CREDIT"
+            set_banktran("CREDIT")
+        elif re.match(r"^WIRE TRANSFER FROM ", action):
+            set_banktran("XFER")
+        elif re.match(r"^WIRE TRANSFER TO ", action):
+            set_banktran("XFER")
+        elif re.match(r"^Electronic Funds Transfer Received", action):
+            set_banktran("CREDIT")
+        elif re.match(r"^TRANSFER OF ASSETS ACAT RECEIVE", action):
+            set_banktran("XFER")
+        elif re.match(r"^TRANSFER OF ASSETS ACAT DELIVER", action):
+            set_banktran("XFER")
+        elif re.match(r"^TRANSFERRED TO ", action):
+            set_banktran("XFER")
         else:
-            raise ValueError(f"Unknown action: {action}")
+            LOGGER.warning(f"Unknown action: {action}.  Guessing...")
+            if isinstance(amount_value, Decimal):
+                set_banktran("CREDIT" if amount_value >= 0 else "DEBIT")
+            else:
+                set_banktran("OTHER")
 
         # print(f"{invest_stmt_line}")
         return invest_stmt_line
@@ -267,13 +264,12 @@ class FidelityCSVParser(AbstractStatementParser):
                     continue
                 invest_stmt_line = self.parse_record(csv_line)
                 if invest_stmt_line:
+                    print(invest_stmt_line)
                     invest_stmt_line.assert_valid()
                     self.statement.invest_lines.append(invest_stmt_line)
 
             # derive account id from file name
-            match = re.search(
-                r".*History_for_Account_(.*)\.csv", path.basename(self.filename)
-            )
+            match = re.search(r".*Account_(.*)\.csv", path.basename(self.filename))
             if match:
                 self.statement.account_id = match[1]
             elif len(self.account_numbers) == 1:
