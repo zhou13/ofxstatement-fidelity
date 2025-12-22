@@ -140,17 +140,13 @@ wheels = [
 
 [[package]]
 name = "ofxstatement"
-version = "0.9.3"
-source = { registry = "https://pypi.org/simple" }
+version = "0.9.4.dev0"
+source = { git = "ssh://git@github.com/zhou13/ofxstatement.git#e467a28801dc3bf2db177873ec67519392c71a6a" }
 dependencies = [
     { name = "importlib-metadata", marker = "python_full_version < '3.10'" },
     { name = "platformdirs", version = "4.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "platformdirs", version = "4.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "zipp", marker = "python_full_version < '3.10'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2c/0f/57ed99ca5993c7551c99ff1f81b89236c60d9bdd8054e3119a6285828ef3/ofxstatement-0.9.3.tar.gz", hash = "sha256:e56f0bdaad75057bc3e091d8983b7c61aa2f71a5e22afc8164ce5238e777a73e", size = 84086, upload-time = "2025-09-10T19:20:15.621Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/0e/59387b29b748330b8f5c5f80be35f0d11e4db60470c29490c94ba3d47807/ofxstatement-0.9.3-py3-none-any.whl", hash = "sha256:092285583f5d1784ddccf1f1b8427ed39839ea67d76a7ea65ec0af52edfe9a59", size = 53383, upload-time = "2025-09-10T19:20:13.912Z" },
 ]
 
 [[package]]
@@ -171,13 +167,13 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "ofxstatement", specifier = ">=0.1.0" }]
+requires-dist = [{ name = "ofxstatement", git = "ssh://git@github.com/zhou13/ofxstatement.git" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pytest", specifier = ">=8.4.2" },
-    { name = "ruff", specifier = ">=0.14.10" },
+    { name = "ruff", specifier = "==0.14.10" },
 ]
 
 [[package]]

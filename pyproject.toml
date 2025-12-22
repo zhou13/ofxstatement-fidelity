@@ -23,7 +23,7 @@ classifiers = [
 ]
 keywords = ["ofx", "banking", "statement", "plugin", "ofxstatement", "fidelity", "csv"]
 dependencies = [
-  "ofxstatement>=0.1.0",
+  "ofxstatement @ git+ssh://git@github.com/zhou13/ofxstatement.git",
 ]
 
 [dependency-groups]
