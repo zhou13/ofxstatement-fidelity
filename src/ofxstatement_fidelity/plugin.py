@@ -195,13 +195,17 @@ class FidelityCSVParser(AbstractStatementParser):
             invest_stmt_line.trntype = "INVBANKTRAN"
             invest_stmt_line.trntype_detailed = detail
 
-        if re.match(r"^REINVESTMENT .*(Cash)", action):
+        if re.match(
+            r"^REINVESTMENT FIDELITY GOVERNMENT MONEY MARKET (SPAXX) (Cash)", action
+        ):
             # REINVESTMENT FIDELITY GOVERNMENT MONEY MARKET (SPAXX) (Cash) should be ignored
             return None
         elif re.match(r"^DIVIDEND RECEIVED ", action):
             set_income("DIV")
             invest_stmt_line.units = quantity_value
             invest_stmt_line.unit_price = price_value
+        elif re.match(r"^REINVESTMENT ", action):
+            set_buy("BUY")
         elif re.match(r"^YOU BOUGHT ", action):
             set_buy("BUY")
         elif re.match(r"^YOU SOLD ", action):
