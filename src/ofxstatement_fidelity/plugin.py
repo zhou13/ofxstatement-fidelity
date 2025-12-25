@@ -145,17 +145,32 @@ class FidelityCSVParser(AbstractStatementParser):
 
         invest_stmt_line.fees = self.parse_value(fees, "fees")
         invest_stmt_line.amount = amount_value = self.parse_value(amount, "amount")
+
+        if (
+            isinstance(cash_balance, str)
+            and cash_balance.strip().lower() == "processing"
+        ):
+            return None
+
         cash_balance_value = self.parse_decimal(cash_balance)
         if cash_balance_value is not None and self.end_cash_balance is None:
             self.end_cash_balance = cash_balance_value
 
-        date = datetime.strptime(run_date[0:10], "%m/%d/%Y")
+        def parse_us_date(date_str: str) -> datetime:
+            for fmt in ("%m/%d/%Y", "%m/%d/%y"):
+                try:
+                    return datetime.strptime(date_str[:10], fmt)
+                except ValueError:
+                    continue
+            raise ValueError(f"Unrecognized date format: {date_str}")
+
+        date = parse_us_date(run_date)
         invest_stmt_line.date = date
         id = self.id_generator.create_id(date)
         invest_stmt_line.id = id
 
         if settlement_date:
-            date_user = datetime.strptime(settlement_date[0:10], "%m/%d/%Y")
+            date_user = parse_us_date(settlement_date)
         else:
             date_user = date
 
@@ -219,6 +234,10 @@ class FidelityCSVParser(AbstractStatementParser):
             set_banktran("DEBIT")
         elif re.match(r"^Check Paid", action):
             set_banktran("DEBIT")
+        elif re.match(r"^DEBIT CARD PURCHASE", action):
+            set_banktran("DEBIT")
+        elif re.match(r"^REDEMPTION FROM CORE ACCOUNT", action):
+            set_sell("SELL")
         elif re.match(r"^TRANSFERRED FROM ", action):
             set_banktran("XFER")
         elif re.match(r"^DIRECT DEPOSIT ", action):
