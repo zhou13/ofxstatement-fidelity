@@ -318,7 +318,6 @@ class FidelityCSVParser(AbstractStatementParser):
                 sl.date for sl in self.statement.invest_lines if sl.date is not None
             )
             self.statement.end_balance = self.last_cash_balance
-            breakpoint()
 
         # print(f"{self.statement}")
         return self.statement
