@@ -280,7 +280,7 @@ class FidelityCSVParser(AbstractStatementParser):
         with open(self.filename, "r") as fin:
             for line in fin:
                 line = line.strip("\ufeff").strip()
-                if line.startswith("Run Date") or line[0].isdigit():
+                if line.startswith("Run Date") or (len(line) > 0 and line[0].isdigit()):
                     csv_rows.append(line)
 
         csv_rows = csv_rows[:1] + list(reversed(csv_rows[1::]))
