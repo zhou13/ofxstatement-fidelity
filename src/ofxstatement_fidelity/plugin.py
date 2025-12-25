@@ -13,6 +13,8 @@ from ofxstatement.statement import Statement, InvestStatementLine
 
 import logging
 import csv
+from io import StringIO
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +44,7 @@ class FidelityCSVParser(AbstractStatementParser):
         self.id_generator = IdGenerator()
         self.account_number: str | None = None
         self.column_map: dict[str, int] = {}
-        self.end_cash_balance: D | None = None
+        self.last_cash_balance: D | None = None
 
     def parse_datetime(self, value: str) -> datetime:
         return datetime.strptime(value, self.date_format)
@@ -152,9 +154,9 @@ class FidelityCSVParser(AbstractStatementParser):
         ):
             return None
 
-        cash_balance_value = self.parse_decimal(cash_balance)
-        if cash_balance_value is not None and self.end_cash_balance is None:
-            self.end_cash_balance = cash_balance_value
+        cash_balance = self.parse_decimal(cash_balance)
+        cma = cash_balance != self.last_cash_balance  # cash management account
+        self.last_cash_balance = cash_balance
 
         def parse_us_date(date_str: str) -> datetime:
             for fmt in ("%m/%d/%Y", "%m/%d/%y"):
@@ -211,8 +213,9 @@ class FidelityCSVParser(AbstractStatementParser):
             invest_stmt_line.trntype_detailed = detail
 
         if re.match(r"^REINVESTMENT .*(Cash)", action):
-            # REINVESTMENT FIDELITY GOVERNMENT MONEY MARKET (SPAXX) (Cash) should be ignored
-            return None
+            if not cma:
+                return None
+            set_buy("BUY")
         elif re.match(r"^DIVIDEND RECEIVED ", action):
             set_income("DIV")
             invest_stmt_line.units = quantity_value
@@ -272,53 +275,53 @@ class FidelityCSVParser(AbstractStatementParser):
     # parse the CSV file and return a Statement
     def parse(self) -> Statement:
         """Main entry point for parsers"""
+        # first pass: capture column map and store all rows
+        csv_rows: list[str] = []
         with open(self.filename, "r") as fin:
-            self.fin = fin
+            for line in fin:
+                line = line.strip("\ufeff").strip()
+                if line.startswith("Run Date") or line[0].isdigit():
+                    csv_rows.append(line)
 
-            reader = csv.reader(self.fin)
-
-            # loop through the CSV file lines
-            for csv_line in reader:
-                self.cur_record += 1
-                if not csv_line:
-                    continue
-                invest_stmt_line = self.parse_record(csv_line)
-                if invest_stmt_line:
-                    invest_stmt_line.assert_valid()
-                    self.statement.invest_lines.append(invest_stmt_line)
+        csv_rows = csv_rows[:1] + list(reversed(csv_rows[1::]))
+        # second pass: process from bottom to top
+        reader = csv.reader(StringIO("\n".join(csv_rows)))
+        for csv_line in reader:
+            invest_stmt_line = self.parse_record(csv_line)
+            if invest_stmt_line:
+                invest_stmt_line.assert_valid()
+                self.statement.invest_lines.append(invest_stmt_line)
 
             # derive account id from file name
-            match = re.search(r".*Account_(\w*).*\.csv", path.basename(self.filename))
-            if match and match[1]:
-                self.statement.account_id = match[1]
-            elif self.account_number:
-                self.statement.account_id = self.account_number
-            else:
-                LOGGER.warning(
-                    f"Unable to derive account id from {self.filename}, please use a filename like xxx_Account_123456789.csv"
-                )
+        match = re.search(r".*Account_(\w*).*\.csv", path.basename(self.filename))
+        if match and match[1]:
+            self.statement.account_id = match[1]
+        elif self.account_number:
+            self.statement.account_id = self.account_number
+        else:
+            LOGGER.warning(
+                f"Unable to derive account id from {self.filename}, please use a filename like xxx_Account_123456789.csv"
+            )
 
-            # reverse the lines
-            self.statement.invest_lines.reverse()
+        # update ids in bottom-to-top order
+        for invest_line in self.statement.invest_lines:
+            date = invest_line.date
+            new_id = self.id_generator.create_id(date)
+            invest_line.id = new_id
 
-            # after reversing the lines in the list, update the id
-            for invest_line in self.statement.invest_lines:
-                date = invest_line.date
-                new_id = self.id_generator.create_id(date)
-                invest_line.id = new_id
+        if self.statement.invest_lines:
+            # figure out start_date and end_date for the statement
+            self.statement.start_date = min(
+                sl.date for sl in self.statement.invest_lines if sl.date is not None
+            )
+            self.statement.end_date = max(
+                sl.date for sl in self.statement.invest_lines if sl.date is not None
+            )
+            self.statement.end_balance = self.last_cash_balance
+            breakpoint()
 
-            if self.statement.invest_lines:
-                # figure out start_date and end_date for the statement
-                self.statement.start_date = min(
-                    sl.date for sl in self.statement.invest_lines if sl.date is not None
-                )
-                self.statement.end_date = max(
-                    sl.date for sl in self.statement.invest_lines if sl.date is not None
-                )
-                self.statement.end_balance = self.end_cash_balance
-
-            # print(f"{self.statement}")
-            return self.statement
+        # print(f"{self.statement}")
+        return self.statement
 
 
 ##########################################################################
