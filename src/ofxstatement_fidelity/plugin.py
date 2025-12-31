@@ -225,10 +225,10 @@ class FidelityCSVParser(AbstractStatementParser):
         elif re.match(r"^YOU SOLD ", action):
             set_sell("SELL")
         elif re.match(r"^TAX WITHHELD ", action):
-            if symbol and amount_value is not None:
-                set_expense()
-            else:
-                set_banktran("DEBIT")
+            # Unforunately, beancount-import does not support INVEXPENSE
+            # if symbol and amount_value is not None:
+            #     set_expense()
+            set_banktran("DEBIT")
         elif re.match(r"^INTEREST EARNED ", action):
             set_banktran("INT")
         elif re.match(r"^DIRECT DEBIT ", action):
