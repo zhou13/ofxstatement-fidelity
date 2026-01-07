@@ -200,6 +200,10 @@ class FidelityCSVParser(AbstractStatementParser):
             invest_stmt_line.units = quantity_value
             invest_stmt_line.unit_price = price_value
 
+        def set_transfer(trntype_detailed: str) -> None:
+            invest_stmt_line.trntype = "TRANSFER"
+            invest_stmt_line.trntype_detailed = trntype_detailed
+
         def set_income(trntype_detailed: str) -> None:
             invest_stmt_line.trntype = "INCOME"
             invest_stmt_line.trntype_detailed = trntype_detailed
@@ -220,6 +224,8 @@ class FidelityCSVParser(AbstractStatementParser):
             set_income("DIV")
             invest_stmt_line.units = quantity_value
             invest_stmt_line.unit_price = price_value
+        elif re.match(r"^DISTRIBUTION ", action):
+            set_transfer("IN")
         elif re.match(r"^YOU BOUGHT ", action):
             set_buy("BUY")
         elif re.match(r"^YOU SOLD ", action):
