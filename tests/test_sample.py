@@ -60,6 +60,26 @@ def test_parses_two_digit_year(tmp_path) -> None:
     assert statement.invest_lines[0].date_user == datetime(2025, 7, 12)
 
 
+def test_parses_hyphenated_dates(tmp_path) -> None:
+    plugin = FidelityPlugin(UI(), {})
+    csv_path = tmp_path / "History_for_Account_457.csv"
+    csv_path.write_text(
+        dedent(
+            """\
+            Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+            07-11-2025,"YOU SOLD TEST (Cash)",TST,"Test security",Cash,-1,12,,,,12,50.00,07-12-2025
+            """
+        )
+    )
+
+    parser = plugin.get_parser(str(csv_path))
+    statement = parser.parse()
+
+    assert len(statement.invest_lines) == 1
+    assert statement.invest_lines[0].date == datetime(2025, 7, 11)
+    assert statement.invest_lines[0].date_user == datetime(2025, 7, 12)
+
+
 def test_debit_card_purchase_action(tmp_path) -> None:
     plugin = FidelityPlugin(UI(), {})
     csv_path = tmp_path / "History_for_Account_789.csv"

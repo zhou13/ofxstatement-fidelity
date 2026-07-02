@@ -159,7 +159,7 @@ class FidelityCSVParser(AbstractStatementParser):
         self.last_cash_balance = cash_balance
 
         def parse_us_date(date_str: str) -> datetime:
-            for fmt in ("%m/%d/%Y", "%m/%d/%y"):
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y"):
                 try:
                     return datetime.strptime(date_str[:10], fmt)
                 except ValueError:
